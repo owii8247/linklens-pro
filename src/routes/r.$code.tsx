@@ -70,37 +70,31 @@ async function recordEvent({ linkId, request }: { linkId: string; request: Reque
         .slice(0, 32)
     : null;
 
-  await Promise.all([
-    supabaseAdmin.from("analytics_events").insert({
-      link_id: linkId,
-      country,
-      city,
-      region,
-      browser,
-      os,
-      device_type: deviceType,
-      referrer,
-      ip_hash: ipHash,
-      user_agent: ua.slice(0, 500),
-    }),
-    supabaseAdmin.rpc as never, // placeholder removed below
-  ]).catch(() => undefined);
+  await supabaseAdmin.from("analytics_events").insert({
+    link_id: linkId,
+    country,
+    city,
+    region,
+    browser,
+    os,
+    device_type: deviceType,
+    referrer,
+    ip_hash: ipHash,
+    user_agent: ua.slice(0, 500),
+  });
 
-  // Increment click_count atomically with a direct update (RLS bypassed via service role).
-  await supabaseAdmin
-    .from("links")
-    .update({ click_count: ((await currentCount(linkId)) ?? 0) + 1 })
-    .eq("id", linkId);
-}
-
-async function currentCount(linkId: string): Promise<number | null> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data } = await supabaseAdmin
+  // Increment click_count. Read-modify-write is acceptable for typical short-link
+  // traffic; for high-write tables we'd switch to a SECURITY DEFINER SQL function
+  // doing UPDATE … SET click_count = click_count + 1.
+  const { data: current } = await supabaseAdmin
     .from("links")
     .select("click_count")
     .eq("id", linkId)
     .maybeSingle();
-  return data?.click_count ?? null;
+  await supabaseAdmin
+    .from("links")
+    .update({ click_count: (current?.click_count ?? 0) + 1 })
+    .eq("id", linkId);
 }
 
 function renderNotFound(code: string) {
