@@ -100,9 +100,15 @@ export const updateLink = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    const { id, original_url, ...rest } = data;
-    const patch: Record<string, unknown> = { ...rest };
-    if (original_url) patch.original_url = normalizeUrl(original_url);
+    const { id, original_url, title, is_archived } = data;
+    const patch: {
+      original_url?: string;
+      title?: string | null;
+      is_archived?: boolean;
+    } = {};
+    if (original_url !== undefined) patch.original_url = normalizeUrl(original_url);
+    if (title !== undefined) patch.title = title;
+    if (is_archived !== undefined) patch.is_archived = is_archived;
     const { data: link, error } = await context.supabase
       .from("links")
       .update(patch)
