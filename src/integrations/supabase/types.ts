@@ -138,7 +138,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      increment_link_clicks: { Args: { p_link_id: string }; Returns: undefined }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never
