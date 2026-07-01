@@ -108,6 +108,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Premium URL shortener with real-time click analytics, QR codes, and geographic insights.",
       },
+      { name: "description", content: "LinkLens is the premium URL shortener for teams who measure what matters. Custom aliases, QR codes, and analytics that go deeper than clicks." },
+      { property: "og:description", content: "LinkLens is the premium URL shortener for teams who measure what matters. Custom aliases, QR codes, and analytics that go deeper than clicks." },
+      { name: "twitter:description", content: "LinkLens is the premium URL shortener for teams who measure what matters. Custom aliases, QR codes, and analytics that go deeper than clicks." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/7817a1b5-f1d2-41f5-bf68-afe4adc0e727/id-preview-9e0a5ac3--c465d4a6-611d-410b-82b7-c2b71309d5e9.lovable.app-1782892370688.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/7817a1b5-f1d2-41f5-bf68-afe4adc0e727/id-preview-9e0a5ac3--c465d4a6-611d-410b-82b7-c2b71309d5e9.lovable.app-1782892370688.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
