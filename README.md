@@ -1,5 +1,8 @@
 # LinkLens — See Beyond Every Click
 
+<img width="1190" height="590" alt="image" src="https://github.com/user-attachments/assets/c311b7cb-1808-4589-98ce-38d7646e326b" />
+
+
 LinkLens is a premium URL shortener with deep, real-time click analytics. Built as a senior-level reference implementation: clean architecture, strict TypeScript, row-level security, and a polished, dark-first UI.
 
 > Stack: **React 19 · TypeScript · TanStack Start (Vite + SSR on the edge) · TanStack Router · TanStack Query · React Hook Form + Zod · Tailwind CSS v4 · Recharts · Supabase (Postgres + Auth + RLS, accessed via Lovable Cloud)**.
