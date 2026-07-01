@@ -24,6 +24,42 @@ const createInput = z.object({
   title: z.string().max(120).optional().nullable(),
 });
 
+const linkIdInput = z.object({ id: z.string().uuid() });
+
+export const listLinks = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("links")
+      .select("id,short_code,original_url,title,click_count,is_archived,created_at")
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
+
+export const getLinkAnalytics = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => linkIdInput.parse(data))
+  .handler(async ({ data, context }) => {
+    const { data: link, error: linkError } = await context.supabase
+      .from("links")
+      .select("id,short_code,original_url,title,click_count,created_at")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (linkError) throw new Error(linkError.message);
+    if (!link) throw new Error("Link not found");
+
+    const { data: events, error: eventsError } = await context.supabase
+      .from("analytics_events")
+      .select("id,link_id,created_at,country,city,region,browser,os,device_type,referrer,ip_hash")
+      .eq("link_id", data.id)
+      .order("created_at", { ascending: false })
+      .limit(2000);
+    if (eventsError) throw new Error(eventsError.message);
+
+    return { link, events: events ?? [] };
+  });
+
 export const createLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => createInput.parse(data))
@@ -80,7 +116,7 @@ export const createLink = createServerFn({ method: "POST" })
 
 export const deleteLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
+  .inputValidator((data: unknown) => linkIdInput.parse(data))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("links").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
