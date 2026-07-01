@@ -17,7 +17,6 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,9 +37,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { createLink, deleteLink, updateLink } from "@/lib/links.functions";
+import { createLink, deleteLink, listLinks, updateLink } from "@/lib/links.functions";
 import { formatNumber, formatRelative, shortDomain } from "@/lib/format";
-import QRCode from "qrcode";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard · LinkLens" }] }),
@@ -64,19 +62,14 @@ function shortBase() {
 
 function Dashboard() {
   const queryClient = useQueryClient();
+  const getLinks = useServerFn(listLinks);
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
 
   const linksQuery = useQuery({
     queryKey: ["links"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("links")
-        .select("id,short_code,original_url,title,click_count,is_archived,created_at")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as LinkRow[];
-    },
+    queryFn: async () => (await getLinks()) as LinkRow[],
+    retry: 1,
   });
 
   const stats = useMemo(() => {
@@ -309,12 +302,21 @@ function LinkRow({ link }: { link: LinkRow }) {
 
   const openQr = async () => {
     setQrOpen(true);
-    const dataUrl = await QRCode.toDataURL(fullUrl, {
-      width: 512,
-      margin: 1,
-      color: { dark: "#0a0a0a", light: "#ffffff" },
-    });
-    setQrData(dataUrl);
+    setQrData(null);
+    try {
+      // Browser-only import: the PNG encoder used by this package is not safe to
+      // evaluate in the server refresh path, so never import it at route scope.
+      const QRCode = await import("qrcode/lib/browser.js");
+      const dataUrl = await QRCode.toDataURL(fullUrl, {
+        width: 512,
+        margin: 1,
+        color: { dark: "#0a0a0a", light: "#ffffff" },
+      });
+      setQrData(dataUrl);
+    } catch {
+      toast.error("Could not generate QR code");
+      setQrOpen(false);
+    }
   };
 
   const deleteMutation = useMutation({

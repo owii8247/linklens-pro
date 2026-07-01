@@ -1,19 +1,11 @@
-import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useMemo } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { ArrowLeft, ExternalLink, MapPin, Monitor, Smartphone } from "lucide-react";
 
-import { supabase } from "@/integrations/supabase/client";
-import { bucketByDay, topBy, uniqueVisitors, type AnalyticsEvent } from "@/lib/analytics";
+import { getLinkAnalytics } from "@/lib/links.functions";
+import { bucketByDay, topBy, uniqueVisitors, type AnalyticsEvent, type Bucket } from "@/lib/analytics";
 import { formatNumber, formatRelative, shortDomain } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/links/$id")({
@@ -38,36 +30,15 @@ type LinkRow = {
 function LinkDetail() {
   const { id } = Route.useParams();
   const router = useRouter();
+  const fetchAnalytics = useServerFn(getLinkAnalytics);
 
-  const linkQuery = useQuery({
-    queryKey: ["link", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("links")
-        .select("id,short_code,original_url,title,click_count,created_at")
-        .eq("id", id)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) throw notFound();
-      return data as LinkRow;
-    },
+  const analyticsQuery = useQuery({
+    queryKey: ["link-analytics", id],
+    queryFn: async () => fetchAnalytics({ data: { id } }),
+    retry: 1,
   });
 
-  const eventsQuery = useQuery({
-    queryKey: ["events", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("analytics_events")
-        .select("id,link_id,created_at,country,city,region,browser,os,device_type,referrer,ip_hash")
-        .eq("link_id", id)
-        .order("created_at", { ascending: false })
-        .limit(2000);
-      if (error) throw error;
-      return (data ?? []) as (AnalyticsEvent & { ip_hash: string | null })[];
-    },
-  });
-
-  const events = eventsQuery.data ?? [];
+  const events = (analyticsQuery.data?.events ?? []) as (AnalyticsEvent & { ip_hash: string | null })[];
 
   const trend = useMemo(() => bucketByDay(events, 14), [events]);
   const countries = useMemo(() => topBy(events, "country", "Unknown"), [events]);
@@ -76,7 +47,7 @@ function LinkDetail() {
   const referrers = useMemo(() => topBy(events, "referrer", "Direct"), [events]);
   const uniques = useMemo(() => uniqueVisitors(events), [events]);
 
-  if (linkQuery.isLoading) {
+  if (analyticsQuery.isLoading) {
     return (
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
         <div className="h-6 w-48 animate-pulse rounded bg-muted" />
@@ -90,8 +61,8 @@ function LinkDetail() {
     );
   }
 
-  if (!linkQuery.data) return null;
-  const link = linkQuery.data;
+  if (!analyticsQuery.data?.link) return null;
+  const link = analyticsQuery.data.link as LinkRow;
   const fullUrl = `${typeof window === "undefined" ? "" : window.location.origin}/r/${link.short_code}`;
 
   return (
@@ -152,50 +123,7 @@ function LinkDetail() {
             {formatNumber(events.length)} tracked events
           </p>
         </div>
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trend} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-              <defs>
-                <linearGradient id="brandGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="oklch(0.78 0.14 184)" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="oklch(0.78 0.14 184)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="oklch(1 0 0 / 5%)" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tickFormatter={(v: string) => v.slice(5)}
-                stroke="oklch(0.58 0.01 240)"
-                fontSize={10}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                stroke="oklch(0.58 0.01 240)"
-                fontSize={10}
-                tickLine={false}
-                axisLine={false}
-                allowDecimals={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "oklch(0.185 0 0)",
-                  border: "1px solid oklch(1 0 0 / 10%)",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-                labelStyle={{ color: "oklch(0.93 0.005 240)" }}
-              />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="oklch(0.78 0.14 184)"
-                strokeWidth={2}
-                fill="url(#brandGradient)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <TrendChart buckets={trend} />
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -240,6 +168,35 @@ function LinkDetail() {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function TrendChart({ buckets }: { buckets: Bucket[] }) {
+  const max = Math.max(1, ...buckets.map((bucket) => bucket.value));
+  return (
+    <div className="h-64 w-full rounded-lg border border-border bg-background/50 p-4">
+      <div
+        className="grid h-full items-end gap-1.5"
+        style={{ gridTemplateColumns: "repeat(14, minmax(0, 1fr))" }}
+        aria-label="Click trend chart"
+      >
+        {buckets.map((bucket) => {
+          const height = Math.max(6, (bucket.value / max) * 100);
+          return (
+            <div key={bucket.label} className="flex h-full min-w-0 flex-col justify-end gap-2">
+              <div
+                className="min-h-1 rounded-t-sm bg-brand/75 transition-colors hover:bg-brand"
+                style={{ height: `${height}%` }}
+                title={`${bucket.label}: ${bucket.value} clicks`}
+              />
+              <span className="truncate text-center font-mono text-[10px] text-muted-foreground">
+                {bucket.label.slice(5)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
