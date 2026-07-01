@@ -306,7 +306,7 @@ function LinkRow({ link }: { link: LinkRow }) {
     try {
       // Browser-only import: the PNG encoder used by this package is not safe to
       // evaluate in the server refresh path, so never import it at route scope.
-      const { default: QRCode } = await import("qrcode");
+      const QRCode = await import("qrcode/lib/browser.js");
       const dataUrl = await QRCode.toDataURL(fullUrl, {
         width: 512,
         margin: 1,
